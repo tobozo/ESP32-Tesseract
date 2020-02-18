@@ -7448,6 +7448,7 @@ const unsigned  char heart_59_jpg[] = {
 };
 const unsigned  int heart_59_jpg_len = 1664;
 
+
 /*\
 
 // current animation from https://i.giphy.com/media/BXVRf5GyMlElO/giphy.gif (60 images)
@@ -7464,3 +7465,97 @@ for f in *.jpg; do xxd -i $f >> heart_anim.h; done
 
 \*/
 
+struct FrameSrc {
+  const uint8_t *jpeg;
+  size_t   jpeg_len;
+};
+
+struct FrameDimensions {
+  uint16_t width;
+  uint16_t height;
+};
+
+struct Animation {
+  FrameSrc *frames;
+  FrameDimensions dimensions;
+  uint16_t width() {
+    return dimensions.width;
+  }
+  uint16_t height() {
+    return dimensions.height;
+  }
+  FrameSrc frame(uint16_t framenum) {
+    return frames[framenum];
+  }
+};
+
+#define framesCount 60
+FrameDimensions heart_dimensions = { 48, 55 };
+
+FrameSrc heart_frames[framesCount] = {
+  { heart_00_jpg, heart_00_jpg_len},
+  { heart_01_jpg, heart_01_jpg_len},
+  { heart_02_jpg, heart_02_jpg_len},
+  { heart_03_jpg, heart_03_jpg_len},
+  { heart_04_jpg, heart_04_jpg_len},
+  { heart_05_jpg, heart_05_jpg_len},
+  { heart_06_jpg, heart_06_jpg_len},
+  { heart_07_jpg, heart_07_jpg_len},
+  { heart_08_jpg, heart_08_jpg_len},
+  { heart_09_jpg, heart_09_jpg_len},
+  { heart_10_jpg, heart_10_jpg_len},
+  { heart_11_jpg, heart_11_jpg_len},
+  { heart_12_jpg, heart_12_jpg_len},
+  { heart_13_jpg, heart_13_jpg_len},
+  { heart_14_jpg, heart_14_jpg_len},
+  { heart_15_jpg, heart_15_jpg_len},
+  { heart_16_jpg, heart_16_jpg_len},
+  { heart_17_jpg, heart_17_jpg_len},
+  { heart_18_jpg, heart_18_jpg_len},
+  { heart_19_jpg, heart_19_jpg_len},
+  { heart_20_jpg, heart_20_jpg_len},
+  { heart_21_jpg, heart_21_jpg_len},
+  { heart_22_jpg, heart_22_jpg_len},
+  { heart_23_jpg, heart_23_jpg_len},
+  { heart_24_jpg, heart_24_jpg_len},
+  { heart_25_jpg, heart_25_jpg_len},
+  { heart_26_jpg, heart_26_jpg_len},
+  { heart_27_jpg, heart_27_jpg_len},
+  { heart_28_jpg, heart_28_jpg_len},
+  { heart_29_jpg, heart_29_jpg_len},
+  { heart_30_jpg, heart_30_jpg_len},
+  { heart_31_jpg, heart_31_jpg_len},
+  { heart_32_jpg, heart_32_jpg_len},
+  { heart_33_jpg, heart_33_jpg_len},
+  { heart_34_jpg, heart_34_jpg_len},
+  { heart_35_jpg, heart_35_jpg_len},
+  { heart_36_jpg, heart_36_jpg_len},
+  { heart_37_jpg, heart_37_jpg_len},
+  { heart_38_jpg, heart_38_jpg_len},
+  { heart_39_jpg, heart_39_jpg_len},
+  { heart_40_jpg, heart_40_jpg_len},
+  { heart_41_jpg, heart_41_jpg_len},
+  { heart_42_jpg, heart_42_jpg_len},
+  { heart_43_jpg, heart_43_jpg_len},
+  { heart_44_jpg, heart_44_jpg_len},
+  { heart_45_jpg, heart_45_jpg_len},
+  { heart_46_jpg, heart_46_jpg_len},
+  { heart_47_jpg, heart_47_jpg_len},
+  { heart_48_jpg, heart_48_jpg_len},
+  { heart_49_jpg, heart_49_jpg_len},
+  { heart_50_jpg, heart_50_jpg_len},
+  { heart_51_jpg, heart_51_jpg_len},
+  { heart_52_jpg, heart_52_jpg_len},
+  { heart_53_jpg, heart_53_jpg_len},
+  { heart_54_jpg, heart_54_jpg_len},
+  { heart_55_jpg, heart_55_jpg_len},
+  { heart_56_jpg, heart_56_jpg_len},
+  { heart_57_jpg, heart_57_jpg_len},
+  { heart_58_jpg, heart_58_jpg_len},
+  { heart_59_jpg, heart_59_jpg_len}
+};
+
+Animation animation = {
+  heart_frames,
+  heart_dimensions
+};
