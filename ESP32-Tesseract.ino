@@ -34,8 +34,20 @@
 \*/
 
 
-#include <ESP32-Chimera-Core.h> // https://github.com/tobozo/ESP32-Chimera-Core or Arduino Library Manager
-#define tft M5.Lcd
+//#include <ESP32-Chimera-Core.h> // https://github.com/tobozo/ESP32-Chimera-Core or Arduino Library Manager
+//#include <M5StackUpdater.h>
+//#define tft M5.Lcd
+
+// Swap any type
+//template <typename T> static inline void
+//swap_coord(T& a, T& b) { T t = a; a = b; b = t; }
+
+#include <LGFX_TFT_eSPI.hpp>
+#include <driver/ledc.h>
+static TFT_eSPI tft;
+static TFT_eSprite tmpsprite(&tft);
+static TFT_eSprite sprite( &tft );
+static TFT_eSprite coreSprite( &tft );
 
 #include "AmigaRulez.h"
 #include "lookup_tables.h"
@@ -43,7 +55,7 @@
 #include "gfx.h"
 
 // uncommenting this will capture images and save them on the SD, very slow !
-// #define CAPTURE_MODE
+//#define CAPTURE_MODE
 
 enum AnimationTypes {
   ANIMATION_AMIGA,
@@ -363,8 +375,8 @@ static void drawPoints() {
         byte valstart = cache4Dbuff[srcindex][2];
         byte valend   = cache4Dbuff[dstindex][2];
 
-        colorstart = { byte(255-valstart/2), byte(192-valstart/2), byte(203-valstart/2) };
-        colorend   = { byte(255-valend/2),   byte(192-valend/2),   byte(203-valend/2) };
+        colorstart.set( byte(255-valstart/2), byte(192-valstart/2), byte(203-valstart/2) );
+        colorend.set  ( byte(255-valend/2),   byte(192-valend/2),   byte(203-valend/2) );
 
         float r0 = sphereMass + cache4Dbuff[srtindex][2]*scaletobyte*depthScale;
         float r1 = sphereMass + cache4Dbuff[dstindex][2]*scaletobyte*depthScale;
@@ -402,6 +414,11 @@ static void drawPoints() {
 }
 
 
+
+uint8_t* rgbBuffer = NULL;
+TFT_eSprite blahSprite( &tft );
+uint16_t* blahPtr = NULL;
+
 static void drawTesseract() {
 
   unsigned long time_before_draw = millis();
@@ -423,12 +440,31 @@ static void drawTesseract() {
   unsigned long time_before_capture = millis();
 
   #ifdef CAPTURE_MODE
+    /*
     char fileName[32];
     sprintf( fileName, "/jpg/tesseract-%03d.bmp", captured );
     M5.ScreenShot.snapBMP( fileName );
     // sprintf( fileName, "/jpg/tesseract-%03d.jpg", captured );
     // M5.ScreenShot.snapJPG( fileName );
     vTaskDelay(1);
+    */
+
+    //sprite.readRect( corePosX, corePosY, 64, 64, blahPtr );
+
+    //sprite.readRectRGB( corePosX, corePosY, 64, 64, rgbBuffer );
+
+    //free( rgbBuffer );
+
+    /*
+    char fileName[32];
+    sprintf( fileName, "/jpg/tesseract-%03d.jpg", captured );
+    M5.ScreenShot.snapJPG( fileName );*/
+    //M5.ScreenShot.snapJPGBuffer( fileName );
+
+
+    blahSprite.pushSprite( 0, tft.height() - 64 );
+    //blahSprite.deleteSprite();
+
   #endif
 
   unsigned long time_to_capture = millis() - time_before_capture;
@@ -528,16 +564,56 @@ static void mainTask( void * param ) {
 
 
 void setup() {
-  M5.begin();
-  tft.clear();
+  #if defined(ARDUINO_M5Stick_C)
+    AXP192 axp;
+    axp.begin();
+  #elif defined(ARDUINO_M5Stack_Core_ESP32) || defined(ARDUINO_M5STACK_FIRE)
+  #ifdef _SD_H_
+    SD.begin(4, SPI, 20000000);
+  #endif
+
+  #define GPIO_BL 32
+  #elif defined ( ARDUINO_T ) // T-Watch
+  #define GPIO_BL 12
+  #elif defined ( ARDUINO_ESP32_DEV )
+  #define GPIO_BL 5
+  #endif
+
+  #ifdef GPIO_BL
+    pinMode(GPIO_BL, OUTPUT);
+
+    //lgfx::TPin<GPIO_BL>::init();
+    //lgfx::TPin<GPIO_BL>::hi();
+
+    const int BLK_PWM_CHANNEL = 7;
+    ledcSetup(BLK_PWM_CHANNEL, 12000, 8);
+    ledcAttachPin(GPIO_BL, BLK_PWM_CHANNEL);
+    ledcWrite(BLK_PWM_CHANNEL, 128);
+  #endif
+
+
+  #ifdef __M5STACKUPDATER_H
+    if( BUTTON_A_PIN > 0 && digitalRead(BUTTON_A_PIN)==0){
+      updateFromFS( M5STACK_SD ); //SD Updater
+      ESP.restart();
+    }
+
+  #endif
+
+  tft.init();
+
+  tft.setRotation(1);
 
   #ifdef CAPTURE_MODE
     M5.ScreenShot.init( &tft, M5STACK_SD );
-    M5.ScreenShot.begin();
+    M5.ScreenShot.begin( true, 64, 64 );
+    M5STACK_SD.begin();
   #endif
 
-  sprite.setAttribute( PSRAM_ENABLE, false );
-  coreSprite.setAttribute( PSRAM_ENABLE, false );
+  //sprite.setAttribute( PSRAM_ENABLE, false );
+  //coreSprite.setAttribute( PSRAM_ENABLE, false );
+  sprite.setPsram( false );
+  coreSprite.setPsram( false );
 
   #if defined(ARDUINO_LOLIN_D32_PRO)
     // tft.setRotation(3);
@@ -575,13 +651,17 @@ void setup() {
 
   sprite.pushSprite( 0, 0 );
 
-  Serial.printf("Loaded animation %d*%d at [%d:%d]\n", animation.width(), animation.height(), tft.width()/2-(animation.width()/2), tft.height()/2-(animation.height()/2) );
+  //Serial.printf("Loaded animation %d*%d at [%d:%d]\n", animation.width(), animation.height(), tft.width()/2-(animation.width()/2), tft.height()/2-(animation.height()/2) );
 
   aframe++;
   timetraveller = 0;
 
   dostrobe = false;
   AnimationType = ANIMATION_AMIGA;
+
+  rgbBuffer = (uint8_t*)calloc( 64*64*3, sizeof( uint8_t ) );
+  blahPtr = (uint16_t*)blahSprite.createSprite( 64, 64 );
+  blahSprite.setSwapBytes( true );
 
   #ifndef CAPTURE_MODE
     xTaskCreatePinnedToCore( mainTask, "mainTask", 3072, NULL, 32, NULL, 0 ); /* last = Task Core */

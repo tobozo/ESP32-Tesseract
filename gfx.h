@@ -39,6 +39,10 @@
 #pragma GCC diagnostic ignored "-Wunused-variable"
 #pragma GCC diagnostic ignored "-Wempty-body"
 #pragma GCC diagnostic ignored "-Wunused-function"
+#include <functional>
+
+template <typename T> static inline void
+swap_coord(T& a, T& b) { T t = a; a = b; b = t; }
 
 #define NUM_LEVELS 256
 float Draw_gamma = 2.35;   /* looks good enough */
@@ -46,11 +50,6 @@ bool gamma_set = false;
 unsigned char gamma_table[NUM_LEVELS];
 int32_t spriteCenterX;
 int32_t spriteCenterY;
-
-TFT_eSprite tmpsprite = TFT_eSprite(&tft);
-TFT_eSprite sprite = TFT_eSprite( &tft );
-TFT_eSprite coreSprite = TFT_eSprite( &tft );
-
 
 typedef std::vector<std::vector<float>> PointsArray;
 typedef std::array<float,4> Coords;
@@ -88,7 +87,8 @@ RGBColor bgColorAt( TFT_eSprite *sprite, int32_t x, int32_t y ) {
   RGBColor bgcolor;
   uint16_t color565 = sprite->readPixel( x, y );
   color565 = (color565 << 8) | (color565 >> 8);
-  bgcolor.set( color565 );
+  //bgcolor.set( color565 );
+  bgcolor = color565;
   return bgcolor;
 }
 
@@ -560,12 +560,12 @@ void drawCache3dSphere( TFT_eSprite *sprite, Coords3D coords3d, uint16_t diamete
 
   // reduce light source to short range indexes for caching
   int8_t indexedlight[3] = {
-    (int8_t)map( spriteCenterX - posx, -spriteCenterX, spriteCenterX, 16, -16 ),
-    (int8_t)map( spriteCenterY - posy, -spriteCenterX, spriteCenterX, 16, -16 ),
-    (int8_t)map( posz, 0, 255, -16, 16 )
+    (int8_t)map( spriteCenterX - posx, -spriteCenterX, spriteCenterX, 8, -8 ),
+    (int8_t)map( spriteCenterY - posy, -spriteCenterX, spriteCenterX, 8, -8 ),
+    (int8_t)map( posz, 0, 255, -8, 8 )
   };
 
-  tmpsprite.setAttribute( PSRAM_ENABLE, false );
+  tmpsprite.setPsram( false );
 
   SphereRef sphereRef = findCachedSphere( sphereCache, { uint16_t(diameter), { indexedlight[0], indexedlight[1], indexedlight[2] } } );
 

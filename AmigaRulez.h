@@ -220,7 +220,7 @@ struct AmigaRulez {
   void fillTiles(bool alter) {
     for( int j=0; j<8; j++ ) {
       for( int i=0; i<9; i++) {
-        uint16_t color = alter ? RED : WHITE;
+        uint16_t color = alter ? TFT_RED : TFT_WHITE;
         sprite->fillTriangle(points[i][j].x,     points[i][j].y,     points[i+1][j].x, points[i+1][j].y, points[i+1][j+1].x, points[i+1][j+1].y, color);
         sprite->fillTriangle(points[i+1][j+1].x, points[i+1][j+1].y, points[i][j+1].x, points[i][j+1].y, points[i][j].x,     points[i][j].y,     color);
         alter = !alter;
