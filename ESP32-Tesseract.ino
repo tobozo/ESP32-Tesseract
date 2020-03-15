@@ -631,7 +631,7 @@ void setup() {
 
   sprite.setColorDepth( 16 ); // set this to 8 when screenWidth*screenHeight > 238*238, since pram is disabled for sprites in this demo
   sprite.createSprite( screenWidth, screenHeight );
-  sprite.setSwapBytes( true ); // for receiving color data from another coreSprite
+  //sprite.setSwapBytes( true ); // for receiving color data from another coreSprite
   spritePosX = tft.width()/2 - screenWidth/2;
   spritePosY = tft.height()/2 - screenHeight/2;
   sprite.fillSprite( TFT_BLACK );
@@ -661,7 +661,7 @@ void setup() {
 
   rgbBuffer = (uint8_t*)calloc( 64*64*3, sizeof( uint8_t ) );
   blahPtr = (uint16_t*)blahSprite.createSprite( 64, 64 );
-  blahSprite.setSwapBytes( true );
+  //blahSprite.setSwapBytes( true );
 
   #ifndef CAPTURE_MODE
     xTaskCreatePinnedToCore( mainTask, "mainTask", 3072, NULL, 32, NULL, 0 ); /* last = Task Core */

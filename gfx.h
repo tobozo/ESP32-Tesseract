@@ -81,12 +81,13 @@ RGBColor colorAt( int32_t start, int32_t end, int32_t pos, RGBColor colorstart, 
 
 
 RGBColor bgColorAt( TFT_eSprite *sprite, int32_t x, int32_t y ) {
+/*
   if( x < 0 || y < 0 || x >= sprite->width() || y >= sprite->height() ) {
     return {0,0,0};
-  }
+  }*/
   RGBColor bgcolor;
   uint16_t color565 = sprite->readPixel( x, y );
-  color565 = (color565 << 8) | (color565 >> 8);
+  //color565 = (color565 << 8) | (color565 >> 8);
   //bgcolor.set( color565 );
   bgcolor = color565;
   return bgcolor;
