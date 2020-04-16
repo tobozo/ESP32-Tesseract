@@ -34,17 +34,14 @@
 \*/
 
 
-//#include <ESP32-Chimera-Core.h> // https://github.com/tobozo/ESP32-Chimera-Core or Arduino Library Manager
-//#include <M5StackUpdater.h>
-//#define tft M5.Lcd
+#include <ESP32-Chimera-Core.h> // https://github.com/tobozo/ESP32-Chimera-Core or Arduino Library Manager
+#include <M5StackUpdater.h>
+#define tft M5.Lcd
 
 // Swap any type
 //template <typename T> static inline void
 //swap_coord(T& a, T& b) { T t = a; a = b; b = t; }
 
-#include <LGFX_TFT_eSPI.hpp>
-#include <driver/ledc.h>
-static TFT_eSPI tft;
 static TFT_eSprite tmpsprite(&tft);
 static TFT_eSprite sprite( &tft );
 static TFT_eSprite coreSprite( &tft );
@@ -564,45 +561,10 @@ static void mainTask( void * param ) {
 
 
 void setup() {
-  #if defined(ARDUINO_M5Stick_C)
-    AXP192 axp;
-    axp.begin();
-  #elif defined(ARDUINO_M5Stack_Core_ESP32) || defined(ARDUINO_M5STACK_FIRE)
-  #ifdef _SD_H_
-    SD.begin(4, SPI, 20000000);
-  #endif
 
-  #define GPIO_BL 32
-  #elif defined ( ARDUINO_T ) // T-Watch
-  #define GPIO_BL 12
-  #elif defined ( ARDUINO_ESP32_DEV )
-  #define GPIO_BL 5
-  #endif
+  M5.begin();
 
-  #ifdef GPIO_BL
-    pinMode(GPIO_BL, OUTPUT);
-
-    //lgfx::TPin<GPIO_BL>::init();
-    //lgfx::TPin<GPIO_BL>::hi();
-
-    const int BLK_PWM_CHANNEL = 7;
-    ledcSetup(BLK_PWM_CHANNEL, 12000, 8);
-    ledcAttachPin(GPIO_BL, BLK_PWM_CHANNEL);
-    ledcWrite(BLK_PWM_CHANNEL, 128);
-  #endif
-
-
-  #ifdef __M5STACKUPDATER_H
-    if( BUTTON_A_PIN > 0 && digitalRead(BUTTON_A_PIN)==0){
-      updateFromFS( M5STACK_SD ); //SD Updater
-      ESP.restart();
-    }
-
-  #endif
-
-  tft.init();
-
-  tft.setRotation(1);
+  delay(10000);
 
   #ifdef CAPTURE_MODE
     M5.ScreenShot.init( &tft, M5STACK_SD );
