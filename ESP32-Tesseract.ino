@@ -35,17 +35,27 @@
 
 
 #include <ESP32-Chimera-Core.h> // https://github.com/tobozo/ESP32-Chimera-Core or Arduino Library Manager
-#define tft M5.Lcd
+#define SDU_APP_NAME   "Tesseract" // app title for the sd-updater lobby screen
+#define SDU_APP_PATH   "/Tesseract.bin"     // app binary file name on the SD Card (also displayed on the sd-updater lobby screen)
+#define SDU_APP_AUTHOR "@tobozo"           // app binary author name for the sd-updater lobby screen
+#include <M5StackUpdater.h>
+static LGFX &tft(M5.Lcd);
 
+static LGFX_Sprite tmpsprite(&tft);
+static LGFX_Sprite sprite( &tft );
+static LGFX_Sprite coreSprite( &tft );
+
+#include "gfx.h"
 #include "AmigaRulez.h"
 #include "lookup_tables.h"
 #include "heart_anim.h"
-#include "gfx.h"
+
 
 // uncommenting this will capture images and save them on the SD, very slow !
-// #define CAPTURE_MODE
+//#define CAPTURE_MODE
 
-enum AnimationTypes {
+enum AnimationTypes
+{
   ANIMATION_AMIGA,
   ANIMATION_HEART
 };
@@ -60,9 +70,9 @@ int aframe = 0; // animation frame number
   uint16_t screenWidth = 128;
   uint16_t screenHeight = 128;
 #else
-  // honest ~30 fps on 238x238
-  uint16_t screenWidth = 238;
-  uint16_t screenHeight = 238;
+  // honest ~30 fps on 230x230
+  uint16_t screenWidth = 230;
+  uint16_t screenHeight = 230;
 #endif
 
 
@@ -126,14 +136,16 @@ static PointsIndexesArray points4D;
 static RGBColor colorstart;
 static RGBColor colorend;
 
-static PointsArray rot3d = {
+static PointsArray rot3d =
+{
   { 1, 0, 0 },
   { 0, (float)romcos(QuarterPI), (float)-romsin(QuarterPI) },
   { 0, (float)romsin(QuarterPI), (float)romcos(QuarterPI) }
 };
 
 
-static bool pointIsIndexed( int16_t point ) {
+static bool pointIsIndexed( int16_t point )
+{
   for(byte i=0;i<points4D.size();i++) {
     if( point == points4D[i] ) {
       return true;
@@ -143,14 +155,16 @@ static bool pointIsIndexed( int16_t point ) {
 }
 
 
-static void pointPush( int16_t point ) {
+static void pointPush( int16_t point )
+{
   if( ! pointIsIndexed( point ) ) {
     points4D.push_back( point );
   }
 }
 
 
-static bool lineIsIndexed( std::array<int16_t,2> line ) {
+static bool lineIsIndexed( std::array<int16_t,2> line )
+{
   for(byte i=0;i<lines4D.size();i++) {
     if( (line[0] == lines4D[i][0] && line[1] == lines4D[i][1])
      || (line[1] == lines4D[i][0] && line[0] == lines4D[i][1])
@@ -162,7 +176,8 @@ static bool lineIsIndexed( std::array<int16_t,2> line ) {
 }
 
 
-static void linePush( std::array<int16_t,2> line ) {
+static void linePush( std::array<int16_t,2> line )
+{
   if( !lineIsIndexed( line ) ) {
     lines4D.push_back( line );
   }
@@ -170,7 +185,8 @@ static void linePush( std::array<int16_t,2> line ) {
 
 
 /* sort xyz by z depth */
-static void zSortPoints() {
+static void zSortPoints()
+{
   bool swapped;
   int16_t temp;
   float zdepth, nextzdepth;
@@ -190,14 +206,16 @@ static void zSortPoints() {
 }
 
 
-static void setCoordsCache( ByteCoords cc, Coords &pout ) {
+static void setCoordsCache( ByteCoords cc, Coords &pout )
+{
   byte x = cc[0], y=cc[1], z=cc[2], w=cc[3];
   int16_t cacheID = x + y*2 + z*4 + w*8;
   cache4D[cacheID] = { (int16_t)pout[0], (int16_t)pout[1], (int16_t)pout[2], (int16_t)pout[3] };
 }
 
 
-static bool isInCoordsCache( ByteCoords cc ) {
+static bool isInCoordsCache( ByteCoords cc )
+{
   byte x = cc[0], y=cc[1], z=cc[2], w=cc[3];
   int16_t cacheID = x + y*2 + z*4 + w*8;
   if( cache4D[cacheID][0] + cache4D[cacheID][1] + cache4D[cacheID][2] + cache4D[cacheID][3] == 0 ) {
@@ -207,14 +225,16 @@ static bool isInCoordsCache( ByteCoords cc ) {
 }
 
 
-static void clearCoordsCache() {
+static void clearCoordsCache()
+{
   for( byte  i=0;i<16;i++ ) {
     cache4D[i] = {0,0,0,0};
   }
 }
 
 
-static void multiplyCoords( PointsArray &A, PointsArray &B, PointsArray &C) {
+static void multiplyCoords( PointsArray &A, PointsArray &B, PointsArray &C)
+{
   C.clear();
   for (byte i = 0; i < A.size(); i++) {
     std::vector<float> mm;
@@ -230,7 +250,8 @@ static void multiplyCoords( PointsArray &A, PointsArray &B, PointsArray &C) {
 }
 
 
-static void multiplyCoords( PointsArray &A, Coords &B, PointsArray &C) {
+static void multiplyCoords( PointsArray &A, Coords &B, PointsArray &C)
+{
   PointsArray CoordsToPointsArray(4);
   for(byte i=0;i<B.size();i++) {
     CoordsToPointsArray[i].push_back(B[i]);
@@ -239,7 +260,8 @@ static void multiplyCoords( PointsArray &A, Coords &B, PointsArray &C) {
 }
 
 
-static void transformPoint(ByteCoords p0) {
+static void transformPoint(ByteCoords p0)
+{
 
   if( isInCoordsCache( p0 ) ) {
     return;
@@ -321,7 +343,8 @@ static void transformPoint(ByteCoords p0) {
 }
 
 
-static void calcLinesFromPoint( uint8_t x, uint8_t y, uint8_t z, uint8_t w ) {
+static void calcLinesFromPoint( uint8_t x, uint8_t y, uint8_t z, uint8_t w )
+{
 
   int16_t _2y = y*2;
   int16_t _4z = z*4;
@@ -335,6 +358,9 @@ static void calcLinesFromPoint( uint8_t x, uint8_t y, uint8_t z, uint8_t w ) {
     line4Index =   x +     _2y +     _4z + (1-w)*8
   ;
   if( !linesProcessed ) {
+    sprite.setCursor( 0, 0 );
+    sprite.printf("X:%02x Y:%02x Z:%02x W:%02x", x, y, z, w );
+    sprite.pushSprite( spritePosX, spritePosY );
     linePush( {pointIndex, line1Index} );
     linePush( {pointIndex, line2Index} );
     linePush( {pointIndex, line3Index} );
@@ -345,7 +371,8 @@ static void calcLinesFromPoint( uint8_t x, uint8_t y, uint8_t z, uint8_t w ) {
 }
 
 
-static void drawPoints() {
+static void drawPoints()
+{
 
   zSortPoints();
 
@@ -363,8 +390,8 @@ static void drawPoints() {
         byte valstart = cache4Dbuff[srcindex][2];
         byte valend   = cache4Dbuff[dstindex][2];
 
-        colorstart = { byte(255-valstart/2), byte(192-valstart/2), byte(203-valstart/2) };
-        colorend   = { byte(255-valend/2),   byte(192-valend/2),   byte(203-valend/2) };
+        colorstart.set( byte(255-valstart/2), byte(192-valstart/2), byte(203-valstart/2) );
+        colorend.set  ( byte(255-valend/2),   byte(192-valend/2),   byte(203-valend/2) );
 
         float r0 = sphereMass + cache4Dbuff[srtindex][2]*scaletobyte*depthScale;
         float r1 = sphereMass + cache4Dbuff[dstindex][2]*scaletobyte*depthScale;
@@ -388,7 +415,7 @@ static void drawPoints() {
         corePosY,
         animation.width(),
         animation.height(),
-        (uint16_t*)coreSprite.frameBuffer(0),
+        (uint16_t*)coreSprite.getBuffer(),
         TFT_BLACK
       );
     }
@@ -402,8 +429,13 @@ static void drawPoints() {
 }
 
 
-static void drawTesseract() {
 
+uint8_t* rgbBuffer = NULL;
+LGFX_Sprite blahSprite( &tft );
+uint16_t* blahPtr = NULL;
+
+static void drawTesseract()
+{
   unsigned long time_before_draw = millis();
 
   if( dostrobe ) {
@@ -423,12 +455,31 @@ static void drawTesseract() {
   unsigned long time_before_capture = millis();
 
   #ifdef CAPTURE_MODE
+
     char fileName[32];
     sprintf( fileName, "/jpg/tesseract-%03d.bmp", captured );
     M5.ScreenShot.snapBMP( fileName );
     // sprintf( fileName, "/jpg/tesseract-%03d.jpg", captured );
     // M5.ScreenShot.snapJPG( fileName );
     vTaskDelay(1);
+
+
+    //sprite.readRect( corePosX, corePosY, 64, 64, blahPtr );
+
+    //sprite.readRectRGB( corePosX, corePosY, 64, 64, rgbBuffer );
+
+    //free( rgbBuffer );
+
+    /*
+    char fileName[32];
+    sprintf( fileName, "/jpg/tesseract-%03d.jpg", captured );
+    M5.ScreenShot.snapJPG( fileName );*/
+    //M5.ScreenShot.snapJPGBuffer( fileName );
+
+
+    //blahSprite.pushSprite( 0, tft.height() - 64 );
+    //blahSprite.deleteSprite();
+
   #endif
 
   unsigned long time_to_capture = millis() - time_before_capture;
@@ -470,7 +521,8 @@ static void drawTesseract() {
 }
 
 
-static void doCalcCoords() {
+static void doCalcCoords()
+{
   referenceAngle = timetraveller/*millis()*/ / /*2500.0*/ 1250.0 /*625.0*/;
   referenceAngle = fmod( referenceAngle, FourPi );
   aframe = map( referenceAngle*1000, 0, TwoPi*1000, 0, framesCount-1);
@@ -496,7 +548,8 @@ static void doCalcCoords() {
 }
 
 
-static void calcCoordsTask( void * param ) {
+static void calcCoordsTask( void * param )
+{
   while( 1 ) {
     // prevent a draw to begin as data will
     doCalcCoords();
@@ -506,7 +559,8 @@ static void calcCoordsTask( void * param ) {
 }
 
 
-static void mainTask( void * param ) {
+static void mainTask( void * param )
+{
 
   clearCoordsCache();
 
@@ -527,17 +581,25 @@ static void mainTask( void * param ) {
 
 
 
-void setup() {
+void setup()
+{
   M5.begin();
-  tft.clear();
+  //tft.setRotation(2);
+
+  checkSDUpdater( SD, MENU_BIN, 5000, TFCARD_CS_PIN );
+
+  //delay(10000);
 
   #ifdef CAPTURE_MODE
     M5.ScreenShot.init( &tft, M5STACK_SD );
-    M5.ScreenShot.begin();
+    M5.ScreenShot.begin( true/*, 64, 64*/ );
+    M5STACK_SD.begin();
   #endif
 
-  sprite.setAttribute( PSRAM_ENABLE, false );
-  coreSprite.setAttribute( PSRAM_ENABLE, false );
+  //sprite.setAttribute( PSRAM_ENABLE, false );
+  //coreSprite.setAttribute( PSRAM_ENABLE, false );
+  sprite.setPsram( false );
+  coreSprite.setPsram( false );
 
   #if defined(ARDUINO_LOLIN_D32_PRO)
     // tft.setRotation(3);
@@ -554,14 +616,21 @@ void setup() {
   #endif
 
   sprite.setColorDepth( 16 ); // set this to 8 when screenWidth*screenHeight > 238*238, since pram is disabled for sprites in this demo
-  sprite.createSprite( screenWidth, screenHeight );
-  sprite.setSwapBytes( true ); // for receiving color data from another coreSprite
+  if(! sprite.createSprite( screenWidth, screenHeight ) ) {
+    log_e("Failed to create %dx%d main sprite, halting", screenWidth, screenHeight );
+    while(1) vTaskDelay(1);
+  }
+  //sprite.setSwapBytes( true ); // for receiving color data from another coreSprite
   spritePosX = tft.width()/2 - screenWidth/2;
   spritePosY = tft.height()/2 - screenHeight/2;
   sprite.fillSprite( TFT_BLACK );
 
   coreSprite.setColorDepth( 16 );
-  coreSprite.createSprite( animation.width(), animation.height() );
+  if(! coreSprite.createSprite( animation.width(), animation.height() ) ) {
+    log_e("Failed to create %dx%d animation sprite, halting", animation.width(), animation.height() );
+    while(1) vTaskDelay(1);
+  }
+
   coreSprite.fillSprite( TFT_BLACK );
 
   corePosX = sprite.width()/2-(animation.width()/2);
@@ -575,13 +644,17 @@ void setup() {
 
   sprite.pushSprite( 0, 0 );
 
-  Serial.printf("Loaded animation %d*%d at [%d:%d]\n", animation.width(), animation.height(), tft.width()/2-(animation.width()/2), tft.height()/2-(animation.height()/2) );
+  //Serial.printf("Loaded animation %d*%d at [%d:%d]\n", animation.width(), animation.height(), tft.width()/2-(animation.width()/2), tft.height()/2-(animation.height()/2) );
 
   aframe++;
   timetraveller = 0;
 
   dostrobe = false;
   AnimationType = ANIMATION_AMIGA;
+
+  rgbBuffer = (uint8_t*)calloc( 64*64*3, sizeof( uint8_t ) );
+  blahPtr = (uint16_t*)blahSprite.createSprite( 64, 64 );
+  //blahSprite.setSwapBytes( true );
 
   #ifndef CAPTURE_MODE
     xTaskCreatePinnedToCore( mainTask, "mainTask", 3072, NULL, 32, NULL, 0 ); /* last = Task Core */
@@ -590,7 +663,8 @@ void setup() {
 }
 
 
-void loop() {
+void loop()
+{
   #ifdef CAPTURE_MODE
     // capturing display from task doesn't work well
     // so this is done from the main loop instead
