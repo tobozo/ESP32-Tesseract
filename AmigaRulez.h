@@ -31,7 +31,8 @@
 */
 
 
-struct AmigaBallConfig {
+struct AmigaBallConfig
+{
   long Framelength = 20;
   byte Wires = 7; // 0 = no wireframes
   uint16_t BGColor = tft.color565(0xa9, 0xa9, 0xa9);
@@ -42,18 +43,20 @@ struct AmigaBallConfig {
   uint16_t Width = tft.width();
   uint16_t Height = tft.height();
   uint16_t ScaleRatio = 5; // ball size will have this/nth of the window Height, bigger value means smaller ball
-  TFT_eSprite *sprite;
+  LGFX_Sprite *sprite;
 } amigaBallConfig;
 
 
-struct Points {
+struct Points
+{
   float x = 0.00;
   float y = 0.00;
 };
 
-struct AmigaRulez {
+struct AmigaRulez
+{
 
-  TFT_eSprite *sprite;
+  LGFX_Sprite *sprite;
 
   Points points[10][10];
 
@@ -118,7 +121,8 @@ struct AmigaRulez {
   int spriteCenterX;
   int spriteCenterY;
 
-  void init( AmigaBallConfig config = amigaBallConfig ) {
+  void init( AmigaBallConfig config = amigaBallConfig )
+  {
     BGColor     = config.BGColor;
     GridColor   = config.GridColor;
     Framelength = config.Framelength;//33; // millis
@@ -134,7 +138,8 @@ struct AmigaRulez {
   }
 
 
-  void setupValues() {
+  void setupValues()
+  {
     Scale = Height/ScaleRatio;//
     ScaleAmplitude = Scale/ AmplitudeFactor; // ball diameter will vary on this
     MaxScaleAmplitude = Scale + ScaleAmplitude;
@@ -160,7 +165,8 @@ struct AmigaRulez {
     isMovingRight = true;
   }
 
-  float getLat(float phase, int i) {
+  float getLat(float phase, int i)
+  {
     if(i == 0) {
       return -phase2Rad;
     } else if(i == 9) {
@@ -170,7 +176,8 @@ struct AmigaRulez {
     }
   }
 
-  void calcPoints(float phase) {
+  void calcPoints(float phase)
+  {
     float sin_lat[10] = {0};// = {}
     for(int i=0;i<10;i++) {
       float lat = getLat(phase, i);
@@ -188,7 +195,8 @@ struct AmigaRulez {
     }
   }
 
-  void tiltSphere(float ang) {
+  void tiltSphere(float ang)
+  {
     float st = sin( ang );
     float ct = cos( ang );
     for( int i=0; i<10; i++) {
@@ -201,7 +209,8 @@ struct AmigaRulez {
     }
   }
 
-  void scaleTranslate(float s, float tx, float ty) {
+  void scaleTranslate(float s, float tx, float ty)
+  {
     for( int i=0; i<10; i++) {
       for( int j=0; j<9; j++ ) {
         float _x = points[i][j].x * s + tx;
@@ -212,12 +221,14 @@ struct AmigaRulez {
     }
   }
 
-  void transform(float s, float tx, float ty) {
+  void transform(float s, float tx, float ty)
+  {
     tiltSphere( TiltRad );
     scaleTranslate( s, tx, ty );
   }
 
-  void fillTiles(bool alter) {
+  void fillTiles(bool alter)
+  {
     for( int j=0; j<8; j++ ) {
       for( int i=0; i<9; i++) {
         uint16_t color = alter ? TFT_RED : TFT_WHITE;
@@ -228,7 +239,8 @@ struct AmigaRulez {
     }
   }
 
-  void drawBall(float phase, float scale, float oldscale, float x, float y) {
+  void drawBall(float phase, float scale, float oldscale, float x, float y)
+  {
     calcPoints( fmod(phase, phase8Rad) );
     transform(scale, x, y);
     fillTiles(phase >= phase8Rad);

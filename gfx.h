@@ -41,8 +41,8 @@
 #pragma GCC diagnostic ignored "-Wunused-function"
 #include <functional>
 
-template <typename T> static inline void
-swap_coord(T& a, T& b) { T t = a; a = b; b = t; }
+// Swap any type
+template <typename T> static void swap_coord(T& a, T& b) { T t = a; a = b; b = t; }
 
 #define NUM_LEVELS 256
 float Draw_gamma = 2.35;   /* looks good enough */
@@ -61,15 +61,17 @@ typedef std::array<int16_t,4> Coords4D;
 typedef std::array<int16_t,3> Coords3D;
 
 
-void initGamma( int nlevels ) {
-  for (i=0; i<nlevels; i++) {
+void initGamma( int nlevels )
+{
+  for (int i=0; i<nlevels; i++) {
     gamma_table[i] = (int) (nlevels-1)*pow((float)i/((float)(nlevels-1)), 1.0/Draw_gamma);
   }
   gamma_set = true;
 }
 
 
-RGBColor colorAt( int32_t start, int32_t end, int32_t pos, RGBColor colorstart, RGBColor colorend ) {
+RGBColor colorAt( int32_t start, int32_t end, int32_t pos, RGBColor colorstart, RGBColor colorend )
+{
   if( pos == end ) return colorend;
   if( pos == start ) return colorstart;
   uint8_t r,g,b;
@@ -80,7 +82,8 @@ RGBColor colorAt( int32_t start, int32_t end, int32_t pos, RGBColor colorstart, 
 }
 
 
-RGBColor bgColorAt( TFT_eSprite *sprite, int32_t x, int32_t y ) {
+RGBColor bgColorAt( LGFX_Sprite *sprite, int32_t x, int32_t y )
+{
   if( x < 0 || y < 0 || x >= sprite->width() || y >= sprite->height() ) {
     return {0,0,0};
   }
@@ -93,7 +96,8 @@ RGBColor bgColorAt( TFT_eSprite *sprite, int32_t x, int32_t y ) {
 }
 
 
-uint16_t gammaColorAt( TFT_eSprite *sprite, int32_t x, int32_t y, RGBColor pixelcolor, uint16_t wgt ) {
+uint16_t gammaColorAt( LGFX_Sprite *sprite, int32_t x, int32_t y, RGBColor pixelcolor, uint16_t wgt )
+{
   if( x < 0 || y < 0 || x >= sprite->width() || y >= sprite->height() ) {
     return tft.color565( pixelcolor.r, pixelcolor.g, pixelcolor.b);
   }
@@ -106,7 +110,8 @@ uint16_t gammaColorAt( TFT_eSprite *sprite, int32_t x, int32_t y, RGBColor pixel
 
 
 // draw antialiased line, inspired from Xiaolin Wu algorithm
-static void drawLineAntialiased( TFT_eSprite *sprite, int32_t x0, int32_t y0, int32_t x1, int32_t y1, RGBColor fgcolor, int nlevels=NUM_LEVELS, int nbits=8) {
+static void drawLineAntialiased( LGFX_Sprite *sprite, int32_t x0, int32_t y0, int32_t x1, int32_t y1, RGBColor fgcolor, int nlevels=NUM_LEVELS, int nbits=8)
+{
   uint16_t intshift, erracc,erradj;
   uint16_t erracctmp, wgt, wgtcompmask, wgtpow;
   uint16_t fg16 = tft.color565(fgcolor.r, fgcolor.g, fgcolor.b );
@@ -210,7 +215,8 @@ static void drawLineAntialiased( TFT_eSprite *sprite, int32_t x0, int32_t y0, in
 
 
 // draw antialiased *gradient* line, inspired from Xiaolin Wu algorithm (added gradient support)
-static void drawGradientLineAntialiased( TFT_eSprite *sprite, int32_t x0, int32_t y0, int32_t x1, int32_t y1, RGBColor colorstart, RGBColor colorend, int nlevels=NUM_LEVELS, int nbits=8) {
+static void drawGradientLineAntialiased( LGFX_Sprite *sprite, int32_t x0, int32_t y0, int32_t x1, int32_t y1, RGBColor colorstart, RGBColor colorend, int nlevels=NUM_LEVELS, int nbits=8)
+{
   uint16_t intshift, erracc,erradj;
   uint16_t erracctmp, wgt, wgtcompmask, wgtpow;
   int dx, dy, tmp, xdir;
@@ -327,7 +333,8 @@ static void drawGradientLineAntialiased( TFT_eSprite *sprite, int32_t x0, int32_
 //
 // [-- radius0 --][------------------- partial line -------------------][-- radius1 --]
 //
-static void drawPartialGradientLineAntialiased( TFT_eSprite *sprite, int32_t x0, int32_t y0, int32_t x1, int32_t y1, RGBColor colorstart, RGBColor colorend, int16_t radius0, int16_t radius1 ) {
+static void drawPartialGradientLineAntialiased( LGFX_Sprite *sprite, int32_t x0, int32_t y0, int32_t x1, int32_t y1, RGBColor colorstart, RGBColor colorend, int16_t radius0, int16_t radius1 )
+{
   float d  /* distance */        = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0) );
   float t0 /* distanceratio 0 */ = 1.3*radius0 / d;
   float t1 /* distanceratio 1 */ = 1.3*radius1 / d;
@@ -351,7 +358,8 @@ static void drawPartialGradientLineAntialiased( TFT_eSprite *sprite, int32_t x0,
 // [-- radius0 --][------------------- partial line -------------------][-- radius1 --]
 //
 __attribute__((unused))
-static void drawPartialLineAntialiased( TFT_eSprite *sprite, int32_t x0, int32_t y0, int32_t x1, int32_t y1, RGBColor pixelcolor, int16_t radius0, int16_t radius1 ) {
+static void drawPartialLineAntialiased( LGFX_Sprite *sprite, int32_t x0, int32_t y0, int32_t x1, int32_t y1, RGBColor pixelcolor, int16_t radius0, int16_t radius1 )
+{
   float d  /* distance */        = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0) );
   float t0 /* distanceratio 0 */ = 1.3*radius0 / d;
   float t1 /* distanceratio 1 */ = 1.3*radius1 / d;
@@ -370,7 +378,8 @@ static void drawPartialLineAntialiased( TFT_eSprite *sprite, int32_t x0, int32_t
 
 
 // luminosity reducer, taken from Bodmer's antialiased font
-static uint16_t luminance(uint16_t color, uint8_t luminance) {
+static uint16_t luminance(uint16_t color, uint8_t luminance)
+{
   // Extract rgb colours and stretch range to 0 - 255
   uint16_t r = (color & 0xF800) >> 8; r |= (r >> 5);
   uint16_t g = (color & 0x07E0) >> 3; g |= (g >> 6);
@@ -391,11 +400,12 @@ static uint16_t luminance(uint16_t color, uint8_t luminance) {
 //  - Only fades to black
 //  - frame rate must be >15fps
 //  - Sluggish when the sprite has too many (>50%) non black pixels
-static void spriteFadeOut( TFT_eSprite *sprite, uint8_t strength ) {
+static void spriteFadeOut( LGFX_Sprite *sprite, uint8_t strength )
+{
   int32_t w = sprite->width();
   int32_t h = sprite->height();
   int32_t l = w*h;
-  uint16_t* framebuf = (uint16_t*)sprite->frameBuffer(0);
+  uint16_t* framebuf = (uint16_t*)sprite->getBuffer();
   for( uint32_t i=0;i<l;i++) {
     if( framebuf[i]!=TFT_BLACK ) {
       uint16_t pixcolor = (framebuf[i] >> 8) | (framebuf[i] << 8);
@@ -435,7 +445,8 @@ float fixedlight[3] = { 0, 75, 0 };
 static bool normalized = false;
 
 // spheres are indexed by radius and light source
-typedef struct indexCache {
+typedef struct indexCache
+{
   int32_t radius;
   int8_t light[3];
 } IndexCache;
@@ -443,7 +454,8 @@ typedef struct indexCache {
 // actually more intensity than color
 typedef std::vector<uint8_t> PixelColors;
 
-struct SphereCache {
+struct SphereCache
+{
   int16_t width;
   int16_t height;
   uint16_t radius;
@@ -456,12 +468,14 @@ typedef std::vector<SphereCache> SphereCacheArray;
 
 SphereCacheArray sphereCache;
 
-enum Symetry {
+enum Symetry
+{
   SYM_NONE,
   SYM_X
 };
 
-struct SphereRef {
+struct SphereRef
+{
   int index;
   Symetry symetry;
 };
@@ -469,7 +483,8 @@ struct SphereRef {
 
 // finds a sphere (or its symetrical version) in the cache
 // returns { index in cache, symetry direction }
-SphereRef findCachedSphere( const SphereCacheArray &haystack, const IndexCache &needle ) {
+SphereRef findCachedSphere( const SphereCacheArray &haystack, const IndexCache &needle )
+{
   int max=haystack.size();
   if (max==0) return { -1, SYM_NONE };
   for(int i=0; i<max; i++)
@@ -487,21 +502,27 @@ SphereRef findCachedSphere( const SphereCacheArray &haystack, const IndexCache &
 }
 
 
-void normalize(float * v) {
+void normalize(float * v)
+{
   float len = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
   v[0] /= len; v[1] /= len; v[2] /= len;
 }
 
-float dot(float *x, float *y) {
+float dot(float *x, float *y)
+{
   float d = x[0]*y[0] + x[1]*y[1] + x[2]*y[2];
   return d < 0 ? -d : 0;
 }
 
 
 // render a cached sphere
-void renderCachedSphere( TFT_eSprite *sprite, SphereRef sphereRef, int16_t cornerx, int16_t cornery, uint16_t color ) {
+void renderCachedSphere( LGFX_Sprite *sprite, SphereRef sphereRef, int16_t cornerx, int16_t cornery, uint16_t color )
+{
   int sphereIndex = sphereRef.index;
-  tmpsprite.createSprite( sphereCache[sphereIndex].width, sphereCache[sphereIndex].height );
+  if( ! tmpsprite.createSprite( sphereCache[sphereIndex].width, sphereCache[sphereIndex].height ) ) {
+    log_e("Failed to create %dx%d main sprite, halting", sphereCache[sphereIndex].width, sphereCache[sphereIndex].height );
+    while(1) vTaskDelay(1);
+  }
   //tmpsprite.setColorDepth( 16 );
   tmpsprite.setWindow( 0, 0, tmpsprite.width(), tmpsprite.height() );
 
@@ -512,6 +533,7 @@ void renderCachedSphere( TFT_eSprite *sprite, SphereRef sphereRef, int16_t corne
       for( uint32_t i=0; i < loopsize; i++ ) {
         uint16_t _color = luminance( color, sphereCache[sphereIndex].pixels[i] );
         tmpsprite.pushColor( _color );
+        //tmpsprite.pushBlock( 1, _color );
       }
     break;
     case SYM_X:
@@ -520,6 +542,7 @@ void renderCachedSphere( TFT_eSprite *sprite, SphereRef sphereRef, int16_t corne
           uint16_t pixelpos = xx + yy*sphereCache[sphereIndex].width;
           uint16_t _color = luminance( color, sphereCache[sphereIndex].pixels[pixelpos] );
           tmpsprite.pushColor( _color );
+          //tmpsprite.pushBlock( 1, _color );
         }
       }
     break;
@@ -530,7 +553,7 @@ void renderCachedSphere( TFT_eSprite *sprite, SphereRef sphereRef, int16_t corne
     sphereCache[sphereIndex].offset + cornery - 2,
     sphereCache[sphereIndex].width,
     sphereCache[sphereIndex].height,
-    (uint16_t*)tmpsprite.frameBuffer(0),
+    (uint16_t*)tmpsprite.getBuffer(),
     TFT_BLACK
   );
   tmpsprite.deleteSprite();
@@ -538,7 +561,8 @@ void renderCachedSphere( TFT_eSprite *sprite, SphereRef sphereRef, int16_t corne
 
 
 // cache and/or draw
-void drawCache3dSphere( TFT_eSprite *sprite, Coords3D coords3d, uint16_t diameter, uint16_t color=TFT_WHITE, float k=4, float ambient=0.5) {
+void drawCache3dSphere( LGFX_Sprite *sprite, Coords3D coords3d, uint16_t diameter, uint16_t color=TFT_WHITE, float k=4, float ambient=0.5)
+{
   uint16_t radius = diameter *.5;
   int i, j, intensity, sphereIndex;
   float bfixed, bvar;
@@ -559,7 +583,8 @@ void drawCache3dSphere( TFT_eSprite *sprite, Coords3D coords3d, uint16_t diamete
   spriteCenterY = sprite->height() *.5;
 
   // reduce light source to short range indexes for caching
-  int8_t indexedlight[3] = {
+  int8_t indexedlight[3] =
+  {
     (int8_t)map( spriteCenterX - posx, -spriteCenterX, spriteCenterX, 8, -8 ),
     (int8_t)map( spriteCenterY - posy, -spriteCenterX, spriteCenterX, 8, -8 ),
     (int8_t)map( posz, 0, 255, -8, 8 )

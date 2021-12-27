@@ -19,7 +19,8 @@ float s ;  // result of sin function
 
 // sin table
 // values for first quadrant, other quadrants calculated by symetry
-const uint16_t sintab[NS] = {
+const uint16_t sintab[NS] =
+{
   0,
   50,100,150,201,251,
   301,351,402,452,502,
@@ -234,7 +235,8 @@ float HALFPI = PI*0.5;
 float ITWOPI = 1./TWOPI;
 
 
-float dosincos(float x, bool iscos) {
+float dosincos(float x, bool iscos)
+{
   int ix ;   // index into sin table
   int is = 0.0;   // value read from sin table
   int q ;    // quadrant number 0,1,2,3
@@ -266,10 +268,12 @@ float dosincos(float x, bool iscos) {
   return((float)is*I2F) ;
 }
 
-float romsin(float x) {
+float romsin(float x)
+{
   return dosincos(x, false);
 }
-float romcos(float x) {
+float romcos(float x)
+{
   return dosincos(x, true);
 }
 
@@ -280,7 +284,8 @@ static float logCache[LOG_CACHE_SIZE];
 float precision = 8.90; // 512 / 115
 bool romloginit = false;
 
-float romlog( float in ) {
+float romlog( float in )
+{
   int logindex = in*precision;
   if( logindex > LOG_CACHE_SIZE ) {
     //log_n("Out of cache size at offset %.8f", in);
@@ -302,7 +307,8 @@ static float sqrtCache[SQR_CACHE_SIZE];
 float sqrtprecision = .08;
 bool romsqrtinit = false;
 
-float romsqrt( float in ) {
+float romsqrt( float in )
+{
   int sqrtindex = in*sqrtprecision;
   if( sqrtindex > SQR_CACHE_SIZE ) {
     log_n("Out of cache size at offset %.8f", in);
@@ -321,7 +327,8 @@ float romsqrt( float in ) {
 static float powCache[POW_CACHE_SIZE];
 float powprecision = 1;
 bool rompowinit = false;
-float rompow( float in ) {
+float rompow( float in )
+{
   int powindex = abs(in*powprecision);
   if( powindex > POW_CACHE_SIZE ) {
     log_n("Out of cache size at offset %.8f", in);
