@@ -40,6 +40,9 @@
 #pragma GCC diagnostic ignored "-Wempty-body"
 #pragma GCC diagnostic ignored "-Wunused-function"
 #include <functional>
+#include <vector>
+#include <array>
+
 
 // Swap any type
 template <typename T> static void swap_coord(T& a, T& b) { T t = a; a = b; b = t; }
