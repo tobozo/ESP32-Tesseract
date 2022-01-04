@@ -39,308 +39,70 @@
 #define SDU_APP_PATH   "/Tesseract.bin"     // app binary file name on the SD Card (also displayed on the sd-updater lobby screen)
 #define SDU_APP_AUTHOR "@tobozo"           // app binary author name for the sd-updater lobby screen
 #include <M5StackUpdater.h>
-static LGFX &tft(M5.Lcd);
 
-static LGFX_Sprite tmpsprite(&tft);
+#if defined(ARDUINO_TTGO_T1)
+  // sweet ~50 fps on 128x128 (assuming SPI@27MHz)
+  uint16_t screenWidth = 128;
+  uint16_t screenHeight = 128;
+#else
+  // honest ~30 fps on 230x230 (assuming SPI@40MHz)
+  uint16_t screenWidth = 220;
+  uint16_t screenHeight = 220;
+#endif
+
+// uncommenting this will capture images and save them on the SD, very slow !
+// #define CAPTURE_MODE
+#if defined CAPTURE_MODE
+  static bool ScreenShotEnable = true;
+#else
+  static bool ScreenShotEnable = false;
+#endif
+
+
+static LGFX &tft(M5.Lcd);
+static LGFX_Sprite tmpsprite( &tft );
 static LGFX_Sprite sprite( &tft );
 static LGFX_Sprite coreSprite( &tft );
 
-#include "gfx.h"
-#include "AmigaRulez.h"
-#include "lookup_tables.h"
-#include "heart_anim.h"
+#include "tesseract.h"      // 5D logic
+//#include "qoi_impl.h"       // qoi decoder
+#include "gfx.h"            // effects, helpers
+#include "AmigaRulez.h"     // boing ball animation (projected)
+#include "qoi_skull_anim.h" // spinning heart animation (qoi zoetrope)
+#include "qoi_heart_anim.h" // spinning skull animation (qoi zoetrope)
 
-
-// uncommenting this will capture images and save them on the SD, very slow !
-//#define CAPTURE_MODE
 
 enum AnimationTypes
 {
   ANIMATION_AMIGA,
-  ANIMATION_HEART
+  ANIMATION_QOI
 };
 
 // set this to display the heart animation or the amiga ball
 AnimationTypes AnimationType;// = ANIMATION_AMIGA;
-
-int aframe = 0; // animation frame number
-
-#if defined(ARDUINO_TTGO_T1)
-  // sweet ~50 fps on 128x128
-  uint16_t screenWidth = 128;
-  uint16_t screenHeight = 128;
-#else
-  // honest ~30 fps on 230x230
-  uint16_t screenWidth = 230;
-  uint16_t screenHeight = 230;
-#endif
+Animation* animation;
+AmigaRulez* AmigaBall = new AmigaRulez;
+Button *Btns[3] = { &M5.BtnA, &M5.BtnB, &M5.BtnC };
+RGBColor linesColor = { 255, 192, 128 };
+static uint8_t chroma = 0, lastchroma = 0;
+static uint8_t *rgb = (uint8_t*)&linesColor;
 
 
-uint16_t spritePosX;
-uint16_t spritePosY;
-uint16_t corePosX;
-uint16_t corePosY;
+int aframe = 0; // animation frame number, increased by time unless capturing
 
-float fov = .75; // field of view for perspective
-float baseHScale = 1.25;
-float baseVScale = 1.25;
-float depthScale = (screenWidth*baseHScale)/50;
-float sphereMass = (screenWidth / 50*baseHScale);
+uint16_t spritePosX, spritePosY;
+uint16_t corePosX, corePosY;
+uint16_t centerX, centerY;
 
-static float fps = 0;
-static int fpscount;
-static unsigned long lastfps = millis();
-static int captured = 0;
-static unsigned long timetraveller = millis();
+uint16_t AmigaBallWidth  = 48;
+uint16_t AmigaBallHeight = 48;
 
-static int16_t zSortedPoints4D[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
-static int16_t zSortedPoints4Dbuff[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+uint32_t lastpress = millis();
 
-static float referenceAngle = 0.0;
-static float QuarterPI = PI / 4.0;
-static float TwoPi =  2.0* PI;
-static float FourPi =  4.0 * PI;
-static float scaletobyte = 1.0 / 256.0; // cheap minifloat
-static bool linesProcessed = false;
+float renderangle = 0, renderzoomx = 1.0, renderzoomy = 1.0;
 
-static bool drawing = false;
-static bool needsdrawing = false;
-static bool dostrobe = true;
+typedef void(*btnAction_t)(void);
 
-static Coords tmpCoords;
-
-static PointsArray rot4D = {{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}};
-static PointsArray rotXY;
-static PointsArray rotXZ;
-static PointsArray rotYZ;
-static PointsArray rotXW;
-static PointsArray rotZW;
-static PointsArray paXY;
-static PointsArray paZW;
-static PointsArray paID;
-
-// TODO: use less of those
-static PointsArray projection1;
-static PointsArray projection2;
-static PointsArray projection3;
-static PointsArray projection4;
-
-static Coords4D cache4D[16];
-static Coords4D cache4Dbuff[16];
-
-static LinesIndexesArray lines4DBuff;
-static LinesIndexesArray lines4D;
-
-static PointsIndexesArray points4D;
-
-static RGBColor colorstart;
-static RGBColor colorend;
-
-static PointsArray rot3d =
-{
-  { 1, 0, 0 },
-  { 0, (float)romcos(QuarterPI), (float)-romsin(QuarterPI) },
-  { 0, (float)romsin(QuarterPI), (float)romcos(QuarterPI) }
-};
-
-
-static bool pointIsIndexed( int16_t point )
-{
-  for(byte i=0;i<points4D.size();i++) {
-    if( point == points4D[i] ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-
-static void pointPush( int16_t point )
-{
-  if( ! pointIsIndexed( point ) ) {
-    points4D.push_back( point );
-  }
-}
-
-
-static bool lineIsIndexed( std::array<int16_t,2> line )
-{
-  for(byte i=0;i<lines4D.size();i++) {
-    if( (line[0] == lines4D[i][0] && line[1] == lines4D[i][1])
-     || (line[1] == lines4D[i][0] && line[0] == lines4D[i][1])
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-
-static void linePush( std::array<int16_t,2> line )
-{
-  if( !lineIsIndexed( line ) ) {
-    lines4D.push_back( line );
-  }
-}
-
-
-/* sort xyz by z depth */
-static void zSortPoints()
-{
-  bool swapped;
-  int16_t temp;
-  float zdepth, nextzdepth;
-  do {
-    swapped = false;
-    for(int16_t i=0; i<15; i++ ) {
-      zdepth     = cache4Dbuff[ zSortedPoints4Dbuff[i]   ][2];
-      nextzdepth = cache4Dbuff[ zSortedPoints4Dbuff[i+1] ][2];
-      if ( zdepth > nextzdepth ) {
-        temp = zSortedPoints4Dbuff[i];
-        zSortedPoints4Dbuff[i] = zSortedPoints4Dbuff[i + 1];
-        zSortedPoints4Dbuff[i + 1] = temp;
-        swapped = true;
-      }
-    }
-  } while (swapped);
-}
-
-
-static void setCoordsCache( ByteCoords cc, Coords &pout )
-{
-  byte x = cc[0], y=cc[1], z=cc[2], w=cc[3];
-  int16_t cacheID = x + y*2 + z*4 + w*8;
-  cache4D[cacheID] = { (int16_t)pout[0], (int16_t)pout[1], (int16_t)pout[2], (int16_t)pout[3] };
-}
-
-
-static bool isInCoordsCache( ByteCoords cc )
-{
-  byte x = cc[0], y=cc[1], z=cc[2], w=cc[3];
-  int16_t cacheID = x + y*2 + z*4 + w*8;
-  if( cache4D[cacheID][0] + cache4D[cacheID][1] + cache4D[cacheID][2] + cache4D[cacheID][3] == 0 ) {
-    return false;
-  }
-  return true;
-}
-
-
-static void clearCoordsCache()
-{
-  for( byte  i=0;i<16;i++ ) {
-    cache4D[i] = {0,0,0,0};
-  }
-}
-
-
-static void multiplyCoords( PointsArray &A, PointsArray &B, PointsArray &C)
-{
-  C.clear();
-  for (byte i = 0; i < A.size(); i++) {
-    std::vector<float> mm;
-    for (byte j = 0; j < B[0].size(); j++) {
-      float sum = 0;
-      for (byte k = 0; k < A[0].size(); k++) {
-        sum += A[i][k] * B[k][j];
-      }
-      mm.push_back( sum );
-    }
-    C.push_back( mm );
-  }
-}
-
-
-static void multiplyCoords( PointsArray &A, Coords &B, PointsArray &C)
-{
-  PointsArray CoordsToPointsArray(4);
-  for(byte i=0;i<B.size();i++) {
-    CoordsToPointsArray[i].push_back(B[i]);
-  }
-  multiplyCoords( A, CoordsToPointsArray, C );
-}
-
-
-static void transformPoint(ByteCoords p0)
-{
-
-  if( isInCoordsCache( p0 ) ) {
-    return;
-  }
-
-  for (int i = 0; i < p0.size(); i++) {
-    tmpCoords[i] = (p0[i] - 0.5);
-  }
-  // use the sin/cos lookup table
-  float romcosrefangle = romcos(referenceAngle);
-  float romsinrefangle = romsin(referenceAngle);
-
-  rotXY = {
-    { romcosrefangle, -romsinrefangle, 0, 0},
-    { romsinrefangle, romcosrefangle, 0, 0},
-    { 0, 0, 1, 0 },
-    { 0, 0, 0, 1 }
-  };
-
-  rotXZ = {
-    { romcosrefangle, 0, -romsinrefangle, 0 },
-    { romsinrefangle, 0, romcosrefangle, 0 },
-    { 0, 0, 1, 0 },
-    { 0, 0, 0, 1 }
-  };
-
-  rotYZ = {
-    { 1, romcosrefangle, -romsinrefangle, 0 },
-    { 0, romsinrefangle, romcosrefangle, 0 },
-    { 0, 0, 1, 0 },
-    { 0, 0, 0, 1 }
-  };
-
-  rotXW = {
-    { romcosrefangle, 0, 0, -romsinrefangle },
-    { 0, 1, 0, 0 },
-    { 0, 0, 1, 0 },
-    { romsinrefangle, 0, 0, romcosrefangle }
-  };
-
-  rotZW = {
-    { 1, 0, 0, 0 },
-    { 0, 1, 0, 0 },
-    { 0, 0, romcosrefangle, -romsinrefangle },
-    { 0, 0, romsinrefangle, romcosrefangle }
-  };
-
-
-  multiplyCoords( rotXY, tmpCoords, paXY );
-  multiplyCoords( rotZW, paXY, paZW );
-  multiplyCoords( rot4D, paZW, projection2 );
-  /*
-  //multiplyCoords( rotXY, tmpCoords, paXY );
-  multiplyCoords( rotZW, tmpCoords, paZW );
-  multiplyCoords( rot4D, paZW, projection2 );
-  */
-  /*
-  multiplyCoords( rotXY, tmpCoords, paXY );
-  multiplyCoords( rotZW, paXY, paZW );
-  multiplyCoords( rot4D, paZW, projection2 );
-  */
-  float distance = 3;
-  float w = 1 / (distance - projection2[3][0]);
-
-  projection1 = {
-    { w, 0, 0, 0 },
-    { 0, w, 0, 0 },
-    { 0, 0, w, 0 }
-  };
-
-  multiplyCoords( projection1, projection2, projection3); // project 4d to 3d
-  multiplyCoords( rot3d, projection3, projection4); // project 3d to 2d
-  // add some depth of field
-  projection4[0][0] += fov*projection4[0][0]*projection4[2][0];
-  projection4[1][0] += fov*projection4[1][0]*projection4[2][0];
-
-  Coords pout = {((projection4[0][0] * screenWidth ) * baseHScale)+screenWidth/2, ((projection4[1][0] * screenHeight) * baseVScale)+screenHeight/2, (projection4[2][0]*256)+127 };
-  setCoordsCache( p0, pout );
-}
 
 
 static void calcLinesFromPoint( uint8_t x, uint8_t y, uint8_t z, uint8_t w )
@@ -390,8 +152,8 @@ static void drawPoints()
         byte valstart = cache4Dbuff[srcindex][2];
         byte valend   = cache4Dbuff[dstindex][2];
 
-        colorstart.set( byte(255-valstart/2), byte(192-valstart/2), byte(203-valstart/2) );
-        colorend.set  ( byte(255-valend/2),   byte(192-valend/2),   byte(203-valend/2) );
+        colorstart.set( byte(linesColor.r-valstart/2), byte(linesColor.g-valstart/2), byte(linesColor.b-valstart/2) );
+        colorend.set  ( byte(linesColor.r-valend/2),   byte(linesColor.g-valend/2),   byte(linesColor.b-valend/2) );
 
         float r0 = sphereMass + cache4Dbuff[srtindex][2]*scaletobyte*depthScale;
         float r1 = sphereMass + cache4Dbuff[dstindex][2]*scaletobyte*depthScale;
@@ -408,16 +170,8 @@ static void drawPoints()
       }
     }
 
-
-    if( i==7 ) {
-      sprite.pushImage(
-        corePosX,
-        corePosY,
-        animation.width(),
-        animation.height(),
-        (uint16_t*)coreSprite.getBuffer(),
-        TFT_BLACK
-      );
+    if( i==7 ) { // z-depth absmiddle
+      sprite.pushImage( corePosX, corePosY, coreSprite.width(), coreSprite.height(), (uint16_t*)coreSprite.getBuffer(), TFT_BLACK );
     }
 
     float r = sphereMass + cache4Dbuff[srtindex][2]*scaletobyte*depthScale;
@@ -430,8 +184,8 @@ static void drawPoints()
 
 
 
-uint8_t* rgbBuffer = NULL;
-LGFX_Sprite blahSprite( &tft );
+//uint8_t* rgbBuffer = NULL;
+LGFX_Sprite spinSprite( &tft );
 uint16_t* blahPtr = NULL;
 
 static void drawTesseract()
@@ -446,40 +200,33 @@ static void drawTesseract()
 
   drawPoints();
 
-  sprite.setCursor( 0, 0 );
-  sprite.printf("fps: %2.2f\n", fps);
-  sprite.printf("balls: %d", sphereCache.size()+1);
+  if( drawfps ) {
+    sprite.setCursor( 0, 0 );
+    sprite.printf("fps: %2.2f\n", fps);
+    sprite.printf("balls: %d", sphereCache.size()+1);
+    //sprite.printf("%02x %02x %02x ", linesColor.r, linesColor.g, linesColor.b );
+  }
 
-  sprite.pushSprite( spritePosX, spritePosY );
+  //sprite.pushSprite( spritePosX, spritePosY );
+  sprite.pushRotateZoom/*WithAA*/( &tft, centerX, centerY, renderangle, renderzoomx, renderzoomy );
 
   unsigned long time_before_capture = millis();
 
   #ifdef CAPTURE_MODE
-
+    uint32_t now = millis();
     char fileName[32];
-    sprintf( fileName, "/jpg/tesseract-%03d.bmp", captured );
-    M5.ScreenShot.snapBMP( fileName );
-    // sprintf( fileName, "/jpg/tesseract-%03d.jpg", captured );
-    // M5.ScreenShot.snapJPG( fileName );
+    sprintf( fileName, "/qoi/tesseract-%03d.qoi", captured );
+    fs::File file = SD.open( fileName, FILE_WRITE, true );
+    if ( file ) {
+      qoi_desc desc;
+      qoi_encode( &file, &sprite, &desc );
+      size_t size = file.size();
+      file.close();
+      log_d("Screenshot saved as %s (%d bytes). Total time %d ms", fileName, size, millis()-now );
+    }
+    //sprintf( fileName, "/bmp/tesseract-%03d.bmp", captured );
+    //M5.ScreenShot->snapBMP( fileName );
     vTaskDelay(1);
-
-
-    //sprite.readRect( corePosX, corePosY, 64, 64, blahPtr );
-
-    //sprite.readRectRGB( corePosX, corePosY, 64, 64, rgbBuffer );
-
-    //free( rgbBuffer );
-
-    /*
-    char fileName[32];
-    sprintf( fileName, "/jpg/tesseract-%03d.jpg", captured );
-    M5.ScreenShot.snapJPG( fileName );*/
-    //M5.ScreenShot.snapJPGBuffer( fileName );
-
-
-    //blahSprite.pushSprite( 0, tft.height() - 64 );
-    //blahSprite.deleteSprite();
-
   #endif
 
   unsigned long time_to_capture = millis() - time_before_capture;
@@ -487,19 +234,28 @@ static void drawTesseract()
   captured++;
   fpscount++;
 
-  //aframe++;
+  aframe++;
+  //aframe = map( referenceAngle*1000, 0, TwoPi*1000, 0, (framesCount*2)-1);
   aframe = aframe%framesCount;
   int currentframe = framesCount-(aframe+1);
   //Serial.println( currentframe );
 
   switch( AnimationType ) {
     case ANIMATION_AMIGA:
-      AmigaBall.Phase = fmod( AmigaBall.Phase + ( AmigaBall.phase4Rad - AmigaBall.PhaseVelocity ), AmigaBall.phase4Rad );
-      //AmigaBall.Phase = fmod( Phase + AmigaBall.PhaseVelocity, AmigaBall.phase4Rad );
-      AmigaBall.drawBall( AmigaBall.Phase, coreSprite.width()/2, coreSprite.height()/2, coreSprite.width()/2, coreSprite.height()/2);
+      // spin axis 1
+      AmigaBall->Phase = fmod( AmigaBall->Phase + ( AmigaBall->phase4Rad - AmigaBall->PhaseVelocity ), AmigaBall->phase4Rad );
+      // spin axis 2
+      AmigaBall->TiltRad += .01;
+      AmigaBall->drawBall( AmigaBall->Phase, coreSprite.width()/2, coreSprite.height()/2, coreSprite.width()/2, coreSprite.height()/2);
     break;
-    case ANIMATION_HEART:
-      coreSprite.drawJpg( animation.frame(currentframe).jpeg, animation.frame(currentframe).jpeg_len, 0, 0 );
+    case ANIMATION_QOI:
+      switch( animation->type ) {
+        case IMG_JPG: coreSprite.drawJpg( animation->frame(currentframe).data, animation->frame(currentframe).data_len, 0, 0 ); break;
+        case IMG_PNG: coreSprite.drawPng( animation->frame(currentframe).data, animation->frame(currentframe).data_len, 0, 0 ); break;
+        case IMG_QOI: coreSprite.drawQoi( animation->frame(currentframe).data, animation->frame(currentframe).data_len, 0, 0 ); break;
+        default:
+          break;
+      }
     break;
   }
 
@@ -525,7 +281,6 @@ static void doCalcCoords()
 {
   referenceAngle = timetraveller/*millis()*/ / /*2500.0*/ 1250.0 /*625.0*/;
   referenceAngle = fmod( referenceAngle, FourPi );
-  aframe = map( referenceAngle*1000, 0, TwoPi*1000, 0, framesCount-1);
 
   clearCoordsCache();
 
@@ -559,21 +314,113 @@ static void calcCoordsTask( void * param )
 }
 
 
+static void setAnimation( Animation* anim )
+{
+  animation = anim;
+  coreSprite.deleteSprite();
+  if(! coreSprite.createSprite( animation->width(), animation->height() ) ) {
+    log_e("Failed to create %dx%d animation sprite, halting", animation->width(), animation->height() );
+    while(1) vTaskDelay(1);
+  }
+  framesCount = animation->framesCount;
+}
+
+
+static void setAmigaBall()
+{
+  coreSprite.deleteSprite();
+  if(! coreSprite.createSprite( AmigaBallWidth, AmigaBallHeight ) ) {
+    log_e("Failed to create %dx%d amigaball sprite, halting", AmigaBallWidth, AmigaBallHeight );
+    while(1) vTaskDelay(1);
+  }
+}
+
+
+static btnAction_t btnActions[3] =
+{
+  []() { // BtnA: toggle fps counter
+    drawfps = !drawfps;
+    lastpress = millis();
+    log_d("Draw fps: %s", drawfps?"true":"false");
+  },
+
+  []() { // BtnB: toggle strobe effect
+    dostrobe = !dostrobe;
+    lastpress = millis();
+    log_d("Strobe: %s", dostrobe?"true":"false");
+  },
+
+  []() { // BtnC: toggle amigaball / heart animation
+    AnimationType = (AnimationType==ANIMATION_AMIGA)?ANIMATION_QOI:ANIMATION_AMIGA;
+    if( AnimationType==ANIMATION_QOI ) {
+      setAnimation( animation==std::addressof(animation1) ? &animation2 : &animation1 );
+    } else {
+      setAmigaBall();
+    }
+    coreSprite.fillSprite( TFT_BLACK );
+    corePosX = sprite.width()/2-(coreSprite.width()/2);
+    corePosY = sprite.height()/2-(coreSprite.height()/2);
+    lastpress = millis();
+  }
+
+};
+
+
+
+
+
+
 static void mainTask( void * param )
 {
 
   clearCoordsCache();
 
   xTaskCreatePinnedToCore( calcCoordsTask, "calcCoordsTask", 2048, NULL, 0, NULL, 1 ); /* last = Task Core */
+  while( !needsdrawing ) { vTaskDelay(1); } // wait for first frame
 
-  while(1) {
-
+  while(1)
+  {
     if( needsdrawing ) {
       needsdrawing = false;
       drawing = true;
+
+      chroma = (lastchroma+1)%3;
+
+      if( rgb[chroma] < 255 && rgb[lastchroma] > 128 ) {
+        rgb[lastchroma]--;
+        rgb[chroma]++;
+      } else {
+        lastchroma = chroma;
+      }
+
+      //renderangle += .5;
+      //renderzoomx
+      //renderzoomy
+
       drawTesseract();
       drawing = false;
     }
+
+    M5.update();
+
+    bool waspressed = false;
+    for( int i=0;i<3;i++ ) {
+      if( Btns[i]->wasPressed() ) {
+        btnActions[i]();
+        waspressed = true;
+      }
+    }
+
+    if( ! waspressed ) {
+
+      if( millis() - lastpress > 3000 ) {
+        uint8_t btnId = map( random()%1024, 0, 1024, 1, 2 );
+        btnActions[btnId]();
+        lastpress = millis();
+      }
+
+    }
+
     vTaskDelay(1);
   }
   vTaskDelete( NULL );
@@ -581,83 +428,53 @@ static void mainTask( void * param )
 
 
 
+
 void setup()
 {
-  M5.begin();
-  //tft.setRotation(2);
+  M5.begin( true, true, true, false, ScreenShotEnable );
 
   checkSDUpdater( SD, MENU_BIN, 5000, TFCARD_CS_PIN );
 
-  //delay(10000);
-
-  #ifdef CAPTURE_MODE
-    M5.ScreenShot.init( &tft, M5STACK_SD );
-    M5.ScreenShot.begin( true/*, 64, 64*/ );
-    M5STACK_SD.begin();
-  #endif
-
-  //sprite.setAttribute( PSRAM_ENABLE, false );
-  //coreSprite.setAttribute( PSRAM_ENABLE, false );
   sprite.setPsram( false );
+  sprite.setColorDepth( 16 ); // set this to 8 when screenWidth*screenHeight > 230*230, since pram is disabled for sprites in this demo
+
   coreSprite.setPsram( false );
+  coreSprite.setColorDepth( 16 );
 
-  #if defined(ARDUINO_LOLIN_D32_PRO)
-    // tft.setRotation(3);
-  #elif defined(ARDUINO_ESP32_DEV) // wrover kit
-    tft.setRotation(0);
-  #elif defined(ARDUINO_DDUINO32_XS)
-    // tft.setRotation(0);
-  #elif defined(ARDUINO_TTGO_T1)
-    tft.setRotation(0);
-  #elif defined(ARDUINO_ODROID_ESP32)
-    // tft.setRotation(0);
-  #else // m5stack classic/fire
-    // tft.setRotation(1);
-  #endif
-
-  sprite.setColorDepth( 16 ); // set this to 8 when screenWidth*screenHeight > 238*238, since pram is disabled for sprites in this demo
   if(! sprite.createSprite( screenWidth, screenHeight ) ) {
     log_e("Failed to create %dx%d main sprite, halting", screenWidth, screenHeight );
     while(1) vTaskDelay(1);
   }
-  //sprite.setSwapBytes( true ); // for receiving color data from another coreSprite
+
   spritePosX = tft.width()/2 - screenWidth/2;
   spritePosY = tft.height()/2 - screenHeight/2;
   sprite.fillSprite( TFT_BLACK );
 
-  coreSprite.setColorDepth( 16 );
-  if(! coreSprite.createSprite( animation.width(), animation.height() ) ) {
-    log_e("Failed to create %dx%d animation sprite, halting", animation.width(), animation.height() );
-    while(1) vTaskDelay(1);
-  }
-
-  coreSprite.fillSprite( TFT_BLACK );
-
-  corePosX = sprite.width()/2-(animation.width()/2);
-  corePosY = sprite.height()/2-(animation.height()/2);
-
-  amigaBallConfig.Width = coreSprite.width();
-  amigaBallConfig.Height = coreSprite.height();
+  amigaBallConfig.Width      = AmigaBallWidth;
+  amigaBallConfig.Height     = AmigaBallHeight;
   amigaBallConfig.ScaleRatio = 5;
-  amigaBallConfig.sprite = &coreSprite;
-  AmigaBall.init( amigaBallConfig );
+  amigaBallConfig.sprite     = &coreSprite;
+  AmigaBall->init( amigaBallConfig );
 
-  sprite.pushSprite( 0, 0 );
+  setAmigaBall();
 
-  //Serial.printf("Loaded animation %d*%d at [%d:%d]\n", animation.width(), animation.height(), tft.width()/2-(animation.width()/2), tft.height()/2-(animation.height()/2) );
+  corePosX = sprite.width()/2-(coreSprite.width()/2);
+  corePosY = sprite.height()/2-(coreSprite.height()/2);
+
+  centerX = tft.width()/2;
+  centerY = tft.height()/2;
+
+  // sprite.pushSprite( 0, 0 );
 
   aframe++;
   timetraveller = 0;
 
   dostrobe = false;
+  drawfps = true;
   AnimationType = ANIMATION_AMIGA;
 
-  rgbBuffer = (uint8_t*)calloc( 64*64*3, sizeof( uint8_t ) );
-  blahPtr = (uint16_t*)blahSprite.createSprite( 64, 64 );
-  //blahSprite.setSwapBytes( true );
-
   #ifndef CAPTURE_MODE
-    xTaskCreatePinnedToCore( mainTask, "mainTask", 3072, NULL, 32, NULL, 0 ); /* last = Task Core */
+    xTaskCreatePinnedToCore( mainTask, "mainTask", 4096, NULL, 32, NULL, 0 ); /* last = Task Core */
   #endif
 
 }
@@ -666,9 +483,19 @@ void setup()
 void loop()
 {
   #ifdef CAPTURE_MODE
+    dostrobe = true;
+    drawfps = true;
     // capturing display from task doesn't work well
     // so this is done from the main loop instead
     doCalcCoords();
+
+    if( rgb[chroma] < 255 && rgb[lastchroma] > 128 ) {
+      rgb[lastchroma]--;
+      rgb[chroma]++;
+    } else {
+      lastchroma = chroma;
+    }
+
     drawTesseract();
   #else
     vTaskSuspend(NULL);

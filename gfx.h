@@ -32,17 +32,11 @@
  *
 \*/
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-value"
-#pragma GCC diagnostic ignored "-Wunused-label"
-#pragma GCC diagnostic ignored "-Wchar-subscripts"
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#pragma GCC diagnostic ignored "-Wempty-body"
-#pragma GCC diagnostic ignored "-Wunused-function"
 #include <functional>
 #include <vector>
 #include <array>
-
+#include "lookup_tables.h"
+#include "tesseract.h"
 
 // Swap any type
 template <typename T> static void swap_coord(T& a, T& b) { T t = a; a = b; b = t; }
@@ -53,15 +47,6 @@ bool gamma_set = false;
 unsigned char gamma_table[NUM_LEVELS];
 int32_t spriteCenterX;
 int32_t spriteCenterY;
-
-typedef std::vector<std::vector<float>> PointsArray;
-typedef std::array<float,4> Coords;
-typedef std::array<uint8_t,4> ByteCoords;
-
-typedef std::vector<std::array<int16_t,2>> LinesIndexesArray;
-typedef std::vector<int16_t> PointsIndexesArray;
-typedef std::array<int16_t,4> Coords4D;
-typedef std::array<int16_t,3> Coords3D;
 
 
 void initGamma( int nlevels )
@@ -491,13 +476,15 @@ SphereRef findCachedSphere( const SphereCacheArray &haystack, const IndexCache &
   int max=haystack.size();
   if (max==0) return { -1, SYM_NONE };
   for(int i=0; i<max; i++)
-    if ( haystack[i].radius   == needle.radius
+    if (
+         haystack[i].radius   == needle.radius
       && haystack[i].light[0] == needle.light[0]
       && haystack[i].light[1] == needle.light[1]
       && haystack[i].light[2] == needle.light[2] )
       return { i, SYM_NONE };
-    else if ( haystack[i].radius   ==  needle.radius
-      && haystack[i].light[0] == -needle.light[0]
+    else if (
+         haystack[i].radius   ==  needle.radius
+      && haystack[i].light[0] == -needle.light[0] // inverted x axis
       && haystack[i].light[1] ==  needle.light[1]
       && haystack[i].light[2] ==  needle.light[2] )
       return { i, SYM_X };
@@ -507,7 +494,7 @@ SphereRef findCachedSphere( const SphereCacheArray &haystack, const IndexCache &
 
 void normalize(float * v)
 {
-  float len = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+  float len = romsqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
   v[0] /= len; v[1] /= len; v[2] /= len;
 }
 
@@ -522,43 +509,41 @@ float dot(float *x, float *y)
 void renderCachedSphere( LGFX_Sprite *sprite, SphereRef sphereRef, int16_t cornerx, int16_t cornery, uint16_t color )
 {
   int sphereIndex = sphereRef.index;
-  if( ! tmpsprite.createSprite( sphereCache[sphereIndex].width, sphereCache[sphereIndex].height ) ) {
-    log_e("Failed to create %dx%d main sprite, halting", sphereCache[sphereIndex].width, sphereCache[sphereIndex].height );
-    while(1) vTaskDelay(1);
+  SphereCache *sphere = &sphereCache[sphereIndex];
+  if( ! tmpsprite.createSprite( sphere->width+1, sphere->height+1 ) ) {
+    log_e("Failed to create %dx%d sphere sprite", sphere->width, sphere->height );
+    return;
   }
-  //tmpsprite.setColorDepth( 16 );
+
   tmpsprite.setWindow( 0, 0, tmpsprite.width(), tmpsprite.height() );
 
-  int32_t loopsize = sphereCache[sphereIndex].pixels.size();
+  int32_t loopsize = sphere->pixels.size();
+  uint16_t* sptr = (uint16_t*)tmpsprite.getBuffer();
+  size_t bytepos = 0;
 
   switch( sphereRef.symetry ) {
     case SYM_NONE:
       for( uint32_t i=0; i < loopsize; i++ ) {
-        uint16_t _color = luminance( color, sphereCache[sphereIndex].pixels[i] );
-        tmpsprite.pushColor( _color );
-        //tmpsprite.pushBlock( 1, _color );
+        uint16_t _color = luminance( color, sphere->pixels[i] );
+        _color = (_color << 8) | (_color >> 8);
+        sptr[bytepos] = _color;
+        bytepos++;
       }
     break;
     case SYM_X:
-      for( uint16_t yy = 0; yy < sphereCache[sphereIndex].height; yy++ ) {
-        for( int16_t xx = sphereCache[sphereIndex].width - 1; xx >= 0; xx-- ) {
-          uint16_t pixelpos = xx + yy*sphereCache[sphereIndex].width;
-          uint16_t _color = luminance( color, sphereCache[sphereIndex].pixels[pixelpos] );
-          tmpsprite.pushColor( _color );
-          //tmpsprite.pushBlock( 1, _color );
+      for( uint16_t yy = 0; yy < sphere->height; yy++ ) {
+        for( int16_t xx = sphere->width - 1; xx >= 0; xx-- ) {
+          uint16_t pixelpos = xx + yy*sphere->width;
+          uint16_t _color = luminance( color, sphere->pixels[pixelpos] );
+          _color = (_color << 8) | (_color >> 8);
+          sptr[bytepos] = _color;
+          bytepos++;
         }
       }
     break;
   }
 
-  sprite->pushImage(
-    sphereCache[sphereIndex].offset + cornerx - 2,
-    sphereCache[sphereIndex].offset + cornery - 2,
-    sphereCache[sphereIndex].width,
-    sphereCache[sphereIndex].height,
-    (uint16_t*)tmpsprite.getBuffer(),
-    TFT_BLACK
-  );
+  sprite->pushImage( sphere->offset + cornerx - 2, sphere->offset + cornery - 2, sphere->width, sphere->height, (uint16_t*)tmpsprite.getBuffer(), TFT_BLACK );
   tmpsprite.deleteSprite();
 }
 
@@ -640,8 +625,7 @@ void drawCache3dSphere( LGFX_Sprite *sprite, Coords3D coords3d, uint16_t diamete
 
         intensity = (bfixed+bvar) * 127;
         if (intensity < 0) intensity = 0;
-        if (intensity > 255)
-          intensity = 255;
+        if (intensity > 255) intensity = 255;
 
         //float angle = acos( ((x1-cx)*(x2-cx) + (y1-cy)*(y2-cy) + (z1-cz)*(z2-cz)) / (rr*rr) )
 

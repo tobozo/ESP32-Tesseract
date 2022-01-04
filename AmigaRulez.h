@@ -53,8 +53,10 @@ struct Points
   float y = 0.00;
 };
 
-struct AmigaRulez
+class AmigaRulez
 {
+
+public:
 
   LGFX_Sprite *sprite;
 
@@ -246,4 +248,4 @@ struct AmigaRulez
     fillTiles(phase >= phase8Rad);
   }
 
-} AmigaBall;
+};

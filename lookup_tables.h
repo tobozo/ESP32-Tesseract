@@ -1,3 +1,5 @@
+#pragma once
+
 #define SIZE 150
 #define STEP 2
 #define GRID_SIZE SIZE/STEP
@@ -11,11 +13,11 @@
 #endif
 
 
-int i ;
-long startTime, endTime ;
-float dt ;
-float d = 0.0 ;  // argument to sin function, degrees
-float s ;  // result of sin function
+//int i ;
+//long startTime, endTime ;
+//float dt ;
+//float d = 0.0 ;  // argument to sin function, degrees
+//float s ;  // result of sin function
 
 // sin table
 // values for first quadrant, other quadrants calculated by symetry
